@@ -27,48 +27,117 @@ class SouthboundConnector(LocalConnector):
         self.dispatcher = None
         self.datastore = None
         self.services = options['services']
+        self.db = None
         self.status = {}
 
     def set_up_local_storage(self, options):
         self.datastore = open_datasource(options)
 
-    def inject_dispatcher(self, dispatcher):
-        self.dispatcher = dispatcher
+    def inject_db(self, db):
+        self.db = db
 
     def on_message(self, client, topic, payload, qos, properties):
         msg = payload.decode('utf-8')
         deserialized_model = json.loads(msg)
         self.status[deserialized_model['name']] = None
         self.health_check_result(deserialized_model)
+        self.save_succeess_to_database(deserialized_model)
+
+    def save_succeess_to_database(self, package):
+        diff = dateutil.parser.parse(
+            package['received']) - dateutil.parser.parse(package['sended'])
+
+        service = self.db.service.find_one({'name': package['name']})
+        running = 1 if package['status']['code'] == 0 else 0
+
+        if service is None:
+            logging.debug('save')
+            self.db.subscribers.save({
+                "name": package['name'],
+                "status": package['status'],
+                "received": package['sended'], 
+                "sended": package['received'],
+                "package_id": package['id'],
+                "request_stats": {
+                    "success": running,
+                    "total": 1
+                }
+            })
+        else:
+            logging.debug('update')
+            self.db.subscribers.update(subscriber, { 
+                "$set": { 
+                    "status": package['status'],
+                    "received": package['sended'], 
+                    "sended": package['received'],
+                    "package_id": package['id'],
+                    "request_stats": {
+                        "success": subscriber['request_stats']['success'] + running,
+                        "total": subscriber['request_stats']['total'] + 1
+                    }
+                } 
+            })
+
+    def health_check_result(self, package):
+        diff = dateutil.parser.parse(
+            package['received']) - dateutil.parser.parse(package['sended'])
+
+        running = 1 if package['status']['code'] == 0 else 0
+
+        self.datastore.publish_dict({
+            'table': 'health_check',
+            'tags': {
+                'service_name': package['name']
+            },
+            'timestamp': package['sended'],
+            'message': {
+                'id': package['id'],
+                'service_name': package['name'],
+                'sended': package['sended'],
+                'received': package['received'],
+                'time_spent': diff.total_seconds(),
+                'running': running,
+            }
+        })
 
     async def send_ping(self):
         for service in self.services:
             if service['protocol'] == 'mqtt':
-                await self.check_for_failed_request(service)
+                previous_status = await self.check_for_failed_request(service)
 
-                package_id = str(uuid.uuid4())
                 health_package = {
-                    'id': package_id,
+                    'id': str(uuid.uuid4()),
                     'destination': 'health/_callback',
                     'timestamp': datetime.datetime.utcnow().isoformat()
                 }
                 self.publish(service['endpoint'], json.dumps(health_package))
 
-                self.datastore.publish_dict({
-                    'table': 'send_check',
-                    'tags': {
-                        'service_name': service['name']
-                    },
-                    'timestamp': health_package['timestamp'],
-                    'message': health_package
-                })
+                await self.save_send_check(service, health_package)
+                await self.save_to_database(service, health_package, previous_status)
 
                 self.status[service['name']] = {
-                    'id': package_id,
-                    'answer': False
+                    'id': health_package['id'],
+                    'answer': False,
+                    'sended': health_package['timestamp']
                 }
+    
+
+    async def save_to_database(self, service, health_package, previous_status):
+        pass
+
+    async def save_send_check(self, service, health_package):
+        self.datastore.publish_dict({
+            'table': 'send_check',
+            'tags': {
+                'service_name': service['name']
+            },
+            'timestamp': health_package['timestamp'],
+            'message': health_package
+        })
 
     async def check_for_failed_request(self, service):
+        service = self.db.service.find_one({'name': service['name']})
+
         previus_req = self.status.get(service['name'], None)
         if previus_req is not None:
             self.datastore.publish_dict({
@@ -84,28 +153,8 @@ class SouthboundConnector(LocalConnector):
                 }
             })
             self.status[service['name']] = None
-
-    def health_check_result(self, deserialized_model):
-        diff = dateutil.parser.parse(
-            deserialized_model['received']) - dateutil.parser.parse(deserialized_model['sended'])
-
-        running = 1 if deserialized_model['status']['code'] == 0 else 0
-
-        self.datastore.publish_dict({
-            'table': 'health_check',
-            'tags': {
-                'service_name': deserialized_model['name']
-            },
-            'timestamp': deserialized_model['sended'],
-            'message': {
-                'id': deserialized_model['id'],
-                'service_name': deserialized_model['name'],
-                'sended': deserialized_model['sended'],
-                'received': deserialized_model['received'],
-                'time_spent': diff.total_seconds(),
-                'running': running,
-            }
-        })
+            return False
+        return True
 
 
 STOP = asyncio.Event()
@@ -137,7 +186,8 @@ async def main(args=None):
     southbound.set_up_local_storage(options_db)
     client_south = await create_client(opts.brokers.southbound)
     southbound.register_for_client(client_south)
-
+    southbound.inject_db(db)
+    await southbound.send_ping()
     scheduler.add_job(southbound.send_ping,
                       'interval', seconds=options_engine['interval'])
     southbound.subscribe(options_engine['listen'], qos=2)
