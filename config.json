@@ -1,0 +1,75 @@
+{
+    "tracer": {
+        "host": "linux.machine",
+        "enabled": false,
+        "port": 5775,
+        "service": "subscriber-service"
+    },
+    "database": {
+        "url": "mongodb://linux.machine:27017"
+    },
+    "local_storage": {
+        "host": "linux.machine",
+        "port": 8086,
+        "username": "root",
+        "password": "root",
+        "database": "running_logs"
+    },
+    "brokers": {
+        "southbound": {
+            "host": "linux.machine",
+            "port": 1883,
+            "username": ""
+        },
+        "northbound": {
+            "host": "linux.machine",
+            "port": 1884,
+            "username": ""
+        }
+    },
+    "health": {
+        "listen": "health/#",
+        "interval": 60,
+        "services": [
+            {
+                "protocol": "mqtt",
+                "name": "southbound-dispatcher",
+                "endpoint": "dispatcher/_health"
+            }
+        ]
+    },
+    "logging": {
+        "version": 1,
+        "handlers": {            
+            "console": {
+                "class": "logging.StreamHandler",
+                "formatter": "console"
+            }
+        },
+        "loggers": {
+            "gmqtt": {
+                "level": "INFO",
+                "handlers": [
+                    "console"
+                ]
+            }
+        },
+        "root": {
+            "level": "DEBUG",
+            "handlers": [
+                "console"
+            ]
+        },
+        "formatters": {
+            "file": {
+                "format": "%(asctime)s (%(levelname)s) %(name)s : %(message)s"
+            },
+            "console": {
+                "format": "%(levelname)s: %(message)s"
+            },
+            "debug": {
+                "format": "%(asctime)s (%(levelname)s) %(name)s : %(message)s"
+            }
+        }
+    }
+}
