@@ -194,7 +194,6 @@ async def main(args=None):
     scheduler = AsyncIOScheduler(timezone=utc)
     client = MongoClient(opts.database['url'])
     db = client['chariot_service_health']
-    db.drop_collection('services')
 
     southbound = SouthboundConnector(options_engine)
     if options_tracer['enabled'] is True:
