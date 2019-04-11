@@ -13,6 +13,7 @@ sequenceDiagram
     participant J as Southbound Dispatcher
     participant D as Cloudant
     participant E as InfluxDB
+    participant F as MongoDB
 
     loop Every minute
         A-x+J: Are you OK?
@@ -23,7 +24,9 @@ sequenceDiagram
     J->>E: Can connect?
     E->>J: Connection result
 
-    J-x-A: Health check response
+    J-xA: Health check response
+    A->>E: Save health check response
+    A->>-F: Save health info for a service
 ```
 
 ## Models

@@ -14,7 +14,7 @@
 # ===============================================
 
 # bind - The server socket to bind
-bind = '0.0.0.0:8031'
+bind = '0.0.0.0:8032'
 
 # ===============================================
 #           Process Naming
@@ -23,7 +23,7 @@ bind = '0.0.0.0:8031'
 # proc_name - A base to use with setproctitle for process naming.
 # This affects things like `ps` and `top`.
 # It defaults to ‘gunicorn’.
-name = 'chariot.subscribe.service'
+name = 'chariot.health.service'
 
 
 # ===============================================

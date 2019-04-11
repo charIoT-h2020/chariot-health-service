@@ -39,44 +39,35 @@ class SouthboundConnector(LocalConnector):
     def on_message(self, client, topic, payload, qos, properties):
         msg = payload.decode('utf-8')
         deserialized_model = json.loads(msg)
-        self.status[deserialized_model['name']] = None
-        self.health_check_result(deserialized_model)
-        self.save_succeess_to_database(deserialized_model)
+        if self.status[deserialized_model['name']]['id'] == deserialized_model['id']:
+            self.status[deserialized_model['name']] = None
+            self.health_check_result(deserialized_model)
+            self.save_succeess_to_mongodb(deserialized_model)
 
-    def save_succeess_to_database(self, package):
-        diff = dateutil.parser.parse(
-            package['received']) - dateutil.parser.parse(package['sended'])
+    def save_succeess_to_mongodb(self, package):
+        service = self.db.services.find_one({'name': package['name']})
 
-        service = self.db.service.find_one({'name': package['name']})
+        package['sended'] = dateutil.parser.parse(package['sended'])
+        package['received'] = dateutil.parser.parse(package['received'])
         running = 1 if package['status']['code'] == 0 else 0
 
-        if service is None:
-            logging.debug('save')
-            self.db.subscribers.save({
-                "name": package['name'],
-                "status": package['status'],
-                "received": package['sended'], 
-                "sended": package['received'],
-                "package_id": package['id'],
-                "request_stats": {
-                    "success": running,
-                    "total": 1
-                }
-            })
-        else:
-            logging.debug('update')
-            self.db.subscribers.update(subscriber, { 
-                "$set": { 
-                    "status": package['status'],
-                    "received": package['sended'], 
-                    "sended": package['received'],
-                    "package_id": package['id'],
-                    "request_stats": {
-                        "success": subscriber['request_stats']['success'] + running,
-                        "total": subscriber['request_stats']['total'] + 1
-                    }
-                } 
-            })
+        self.db.services.update(service, {
+            '$set': {
+                'status': package['status'],
+                'received': package['received'],
+                'sended': package['sended'],
+                'running': running,
+                'package_id': None
+            },
+            '$inc': self.get_request_stats(service, running)
+        })
+
+    def get_request_stats(self, service, running):
+        
+        return { 
+            'request_stats.success': running,
+            'request_stats.total': 1,
+        }
 
     def health_check_result(self, package):
         diff = dateutil.parser.parse(
@@ -113,17 +104,46 @@ class SouthboundConnector(LocalConnector):
                 self.publish(service['endpoint'], json.dumps(health_package))
 
                 await self.save_send_check(service, health_package)
-                await self.save_to_database(service, health_package, previous_status)
+                await self.save_ping_to_mongodb(service, health_package, previous_status)
 
                 self.status[service['name']] = {
                     'id': health_package['id'],
                     'answer': False,
                     'sended': health_package['timestamp']
                 }
-    
 
-    async def save_to_database(self, service, health_package, previous_status):
-        pass
+    async def save_ping_to_mongodb(self, service, health_package, previous_status):
+        saved_service = self.db.services.find_one({'name': service['name']})
+        sended = dateutil.parser.parse(health_package['timestamp'])
+
+        if saved_service is None:
+            to_saved_service = {
+                'name': service['name'],
+                'sended': sended,
+                'package_id': health_package['id']
+            }
+
+            if previous_status is False:
+                to_saved_service['running'] = 0
+                to_saved_service['request_stats'] = {
+                    'success': 0,
+                    'total': 1
+                }
+
+            self.db.services.save(to_saved_service)
+        else:
+            to_update_service = {
+                'sended': sended,
+                'package_id': health_package['id']
+            }
+
+            if previous_status is False:
+                to_update_service['running'] = 0
+                to_update_service['status'] = None
+                self.db.services.update(saved_service, {
+                    '$set': to_update_service,
+                    '$inc': { 'request_stats.total': 1 }
+                })
 
     async def save_send_check(self, service, health_package):
         self.datastore.publish_dict({
@@ -136,8 +156,6 @@ class SouthboundConnector(LocalConnector):
         })
 
     async def check_for_failed_request(self, service):
-        service = self.db.service.find_one({'name': service['name']})
-
         previus_req = self.status.get(service['name'], None)
         if previus_req is not None:
             self.datastore.publish_dict({
@@ -176,6 +194,7 @@ async def main(args=None):
     scheduler = AsyncIOScheduler(timezone=utc)
     client = MongoClient(opts.database['url'])
     db = client['chariot_service_health']
+    db.drop_collection('services')
 
     southbound = SouthboundConnector(options_engine)
     if options_tracer['enabled'] is True:
@@ -187,10 +206,10 @@ async def main(args=None):
     client_south = await create_client(opts.brokers.southbound)
     southbound.register_for_client(client_south)
     southbound.inject_db(db)
-    await southbound.send_ping()
     scheduler.add_job(southbound.send_ping,
                       'interval', seconds=options_engine['interval'])
     southbound.subscribe(options_engine['listen'], qos=2)
+    await southbound.send_ping()
     scheduler.start()
 
     logging.info('Waiting message for health checking')
