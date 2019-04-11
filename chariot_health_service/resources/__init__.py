@@ -1,1 +1,2 @@
-from .subscriber import SubscriberResource
+from .health import HealthResource
+from .logs import HealthLogsResource, HealthGroupsResource
