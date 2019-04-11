@@ -7,7 +7,7 @@ import falcon_jsonify
 from chariot_base.utilities import open_config_file
 
 from chariot_base.utilities import Tracer
-from chariot_subscribe_service.resources.subscriber import SubscriberResource
+from chariot_health_service.resources.health import HealthResource
 from wsgiref import simple_server
 
 # falcon.API instances are callable WSGI apps
@@ -17,20 +17,20 @@ app = falcon.API(middleware=[
 
 opts = open_config_file()
 client = MongoClient(opts.database['url'])
-db = client['chariot_subscribe_service']
+db = client['chariot_service_health']
 options_tracer = opts.tracer
 
 # Resources are represented by long-lived class instances
-subscriber = SubscriberResource(db)
+health = HealthResource(db)
 
 if options_tracer['enabled']:
+    logging.info('Enabling tracing')
     tracer = Tracer(options_tracer)
     tracer.init_tracer()
-    subscriber.inject_tracer(tracer)
+    health.inject_tracer(tracer)
 
-app.add_route('/subscriber', subscriber)
-app.add_route('/subscriber/{id}', subscriber)
-app.add_route('/subscriber/{id}/{sensor_id}', subscriber)
+app.add_route('/health', health)
+app.add_route('/health/{id}', health)
 
 if __name__ == '__main__':
     httpd = simple_server.make_server('127.0.0.1', 9000, app)
