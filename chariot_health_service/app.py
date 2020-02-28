@@ -1,15 +1,17 @@
-# Let's get this party started!
-import falcon
-from pymongo import MongoClient
+import logging
 
+import falcon
 import falcon_jsonify
 
-from chariot_base.utilities import open_config_file
+from wsgiref import simple_server
 
+from pymongo import MongoClient
+
+from chariot_base.utilities import open_config_file
 from chariot_base.utilities import Tracer
 from chariot_base.datasource import LocalDataSource
+from chariot_health_service import __service_name__
 from chariot_health_service.resources import HealthResource, HealthLogsResource, HealthGroupsResource
-from wsgiref import simple_server
 
 # falcon.API instances are callable WSGI apps
 app = falcon.API(middleware=[
@@ -18,10 +20,11 @@ app = falcon.API(middleware=[
 
 opts = open_config_file()
 options_db = opts.local_storage
+options_engine = opts.health
 client = MongoClient(opts.database['url'])
 db = client['chariot_service_health']
-infux_db = LocalDataSource(options_db['host'], options_db['port'],
-                           options_db['username'], options_db['password'], options_db['database'])
+options_db['database'] = options_engine['database']
+infux_db = LocalDataSource(**options_db)
 options_tracer = opts.tracer
 
 # Resources are represented by long-lived class instances
@@ -30,7 +33,8 @@ logs = HealthLogsResource(infux_db)
 availability = HealthGroupsResource(infux_db)
 
 if options_tracer['enabled']:
-    logging.info('Enabling tracing')
+    options_tracer['service'] = __service_name__
+    logging.debug(f'Enabling tracing for service "{__service_name__}"')
     tracer = Tracer(options_tracer)
     tracer.init_tracer()
     health.inject_tracer(tracer)

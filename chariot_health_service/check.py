@@ -9,13 +9,14 @@ import signal
 import asyncio
 import logging
 import datetime
-from pymongo import MongoClient
 import dateutil.parser
 
 from pytz import utc
+from pymongo import MongoClient
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from chariot_health_service import __service_name_listener__
 from chariot_base.utilities import open_config_file, Tracer
 from chariot_base.datasource import open_datasource
 from chariot_base.connector import LocalConnector, create_client
@@ -197,7 +198,8 @@ async def main(args=None):
 
     southbound = SouthboundConnector(options_engine)
     if options_tracer['enabled'] is True:
-        logging.info('Enabling tracing')
+        options_tracer['service'] = __service_name_listener__
+        logging.debug(f'Enabling tracing for service "{__service_name_listener__}"')
         tracer = Tracer(options_tracer)
         tracer.init_tracer()
         southbound.inject_tracer(logger.tracer)

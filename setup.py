@@ -11,7 +11,7 @@ with open('README.md') as readme_file:
 requirements = [
     'falcon',
     'influxdb',
-    'chariot_base==0.9.4',
+    'chariot_base',
     'asyncio',
     'gmqtt',
     'influxdb',

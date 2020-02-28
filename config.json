@@ -1,19 +1,18 @@
 {
     "tracer": {
         "host": "linux.machine",
-        "enabled": false,
-        "port": 5775,
-        "service": "subscriber-service"
+        "enabled": true,
+        "port": 5775
     },
     "database": {
         "url": "mongodb://linux.machine:27017"
     },
     "local_storage": {
         "host": "linux.machine",
-        "port": 8086,
+        "path": "storage",
+        "port": 80,
         "username": "root",
-        "password": "root",
-        "database": "running_logs"
+        "password": "root"
     },
     "brokers": {
         "southbound": {
@@ -30,6 +29,7 @@
     "health": {
         "listen": "health/#",
         "interval": 60,
+        "database": "running_logs",
         "services": [
             {
                 "protocol": "mqtt",
