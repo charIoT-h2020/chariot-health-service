@@ -202,7 +202,9 @@ async def main(args=None):
         logging.debug(f'Enabling tracing for service "{__service_name_listener__}"')
         tracer = Tracer(options_tracer)
         tracer.init_tracer()
-        southbound.inject_tracer(logger.tracer)
+        southbound.inject_tracer(tracer)
+
+    options_db['database'] = options_engine['database']
     southbound.set_up_local_storage(options_db)
     client_south = await create_client(opts.brokers.southbound)
     southbound.register_for_client(client_south)

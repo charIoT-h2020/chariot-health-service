@@ -1,6 +1,6 @@
 {
     "tracer": {
-        "host": "linux.machine",
+        "host": "localhost",
         "enabled": true,
         "port": 5775
     },
