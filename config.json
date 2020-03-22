@@ -1,14 +1,14 @@
 {
     "tracer": {
-        "host": "localhost",
+        "host": "192.168.88.212",
         "enabled": true,
         "port": 5775
     },
     "database": {
-        "url": "mongodb://linux.machine:27017"
+        "url": "mongodb://192.168.88.212:27017"
     },
     "local_storage": {
-        "host": "linux.machine",
+        "host": "chariot.home.gtheofilis.com",
         "path": "storage",
         "port": 80,
         "username": "root",
@@ -16,12 +16,12 @@
     },
     "brokers": {
         "southbound": {
-            "host": "linux.machine",
+            "host": "192.168.88.212",
             "port": 1883,
             "username": ""
         },
         "northbound": {
-            "host": "linux.machine",
+            "host": "192.168.88.212",
             "port": 1884,
             "username": ""
         }

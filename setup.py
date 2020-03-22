@@ -21,7 +21,7 @@ requirements = [
     'pycrypto',
     'jaeger-client',
     'pytest-asyncio',
-    'pymongo==3.7.2',
+    'pymongo',
     'apscheduler',
     'python-dateutil'
 ]

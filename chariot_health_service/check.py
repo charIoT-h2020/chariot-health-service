@@ -30,6 +30,7 @@ class SouthboundConnector(LocalConnector):
         self.services = options['services']
         self.db = None
         self.status = {}
+        self.topics = []
 
     def set_up_local_storage(self, options):
         self.datastore = open_datasource(options)
@@ -175,6 +176,24 @@ class SouthboundConnector(LocalConnector):
             return False
         return True
 
+    def on_connect(self, client, flags, rc, properties=None):
+        self.connected = True
+        self.connack = (flags, rc, properties)
+        logging.info(self.connack)
+
+        if rc == 0:
+            self.subscribe_to_topics()
+
+    def set_topics(self, topics):
+        self.topics = topics
+
+    def subscribe_to_topics(self):
+        subscriptions = []
+        for topic in self.topics:
+            subscriptions.append(gmqtt.Subscription(topic, qos=2))
+        self.client.subscribe(subscriptions, subscription_identifier=1)
+        logging.info('Waiting message for health checking')
+
 
 STOP = asyncio.Event()
 
@@ -211,11 +230,12 @@ async def main(args=None):
     southbound.inject_db(db)
     scheduler.add_job(southbound.send_ping,
                       'interval', seconds=options_engine['interval'])
-    southbound.subscribe(options_engine['listen'], qos=2)
-    await southbound.send_ping()
-    scheduler.start()
 
-    logging.info('Waiting message for health checking')
+    southbound.set_topics([options_engine['listen']])
+    southbound.subscribe_to_topics()
+    await southbound.send_ping()
+
+    scheduler.start()
     await STOP.wait()
     await client_south.disconnect()
 
